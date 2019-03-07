@@ -2,8 +2,11 @@ package com.gmall.offline.app
 
 import com.alibaba.fastjson.JSON
 import com.gmall.common.datamodules.UserVisitAction
-import com.gmall.common.utils.PropertiesUtil
+import com.gmall.common.utils.{PropertiesUtil}
+
+import com.gmall.offline.handle.Top10CategoryHandle
 import org.apache.spark.SparkConf
+
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -16,10 +19,13 @@ object OfflineApp {
     var sparkConf = new SparkConf().setMaster("local[*]").setAppName("demo01")
 
     //构建hive sparkSession
-    var sparkSession = SparkSession.builder().config(sparkConf).enableHiveSupport().getOrCreate()
+    val sparkSession = SparkSession.builder().config(sparkConf).enableHiveSupport().getOrCreate()
 
     //将数据从hive中取出来并且构建为RDD
-    readUserVisitActionToRDD(sparkSession)
+    val userVisitActionRDD = readUserVisitActionToRDD(sparkSession)
+
+    Top10CategoryHandle top10CategoryHandle(sparkSession, userVisitActionRDD)
+
   }
 
   //
@@ -52,10 +58,7 @@ object OfflineApp {
     import sparkSession.implicits._
     sparkSession.sql("use gmall ")
     val userVisitActionDateset = sparkSession.sql(sql.toString()).as[UserVisitAction].rdd
-    userVisitActionDateset.foreach(println)
-
-
-
-
+   //userVisitActionDateset.foreach(println)
+    userVisitActionDateset
   }
 }
