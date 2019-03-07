@@ -2,12 +2,13 @@ package com.gmall.offline.app
 
 import com.alibaba.fastjson.JSON
 import com.gmall.common.datamodules.UserVisitAction
-import com.gmall.common.utils.{PropertiesUtil}
-
-import com.gmall.offline.handle.Top10CategoryHandle
+import com.gmall.common.utils.{JdbcUtil, PropertiesUtil}
+import com.gmall.offline.bean.Top10SessioonByCid
+import com.gmall.offline.handle.{Top10CategoryHandle, Top10SessionHandle}
 import org.apache.spark.SparkConf
-
 import org.apache.spark.sql.SparkSession
+
+
 
 /**
   * @aythor HeartisTiger
@@ -23,8 +24,54 @@ object OfflineApp {
 
     //将数据从hive中取出来并且构建为RDD
     val userVisitActionRDD = readUserVisitActionToRDD(sparkSession)
+    //print(userVisitActionRDD.collect().mkString(","))
 
-    Top10CategoryHandle top10CategoryHandle(sparkSession, userVisitActionRDD)
+    val top10CategoryList = Top10CategoryHandle.top10CategoryHandle(sparkSession, userVisitActionRDD)
+    //Top10SessionHandle.handle(top10CategoryList,userVisitActionRDD)
+    //获取top的品类
+    val catetop10 = top10CategoryList.map(_.category_id)
+
+    //将top10的品类弄成广播变量
+    val top10CateBK = sparkSession.sparkContext.broadcast(catetop10)
+
+    // 将top10品类下的数据筛选出来
+    val filterRDD = userVisitActionRDD.filter {
+      case cate =>
+        if (top10CateBK.value.contains(cate.click_category_id.toString)) {
+          true
+        } else {
+          false
+        }
+    }
+    val catelist = filterRDD.map {
+      case userVisit =>
+        (userVisit.click_category_id + "_" + userVisit.session_id, 1L)
+    }.reduceByKey(_ + _).map {
+      case (key, count) =>
+        val cid = key.split("_")(0)
+        val s_id = key.split("_")(1)
+        (cid, Top10SessioonByCid("02",cid,s_id,count))
+    }.groupByKey()
+    val top10ListRDD = catelist.map {
+      case (cid, comItr) =>
+        val top10 = comItr.toList.sortWith((x, y) =>
+          if (x.clickCount > y.clickCount) {
+            true
+          } else {
+            false
+          }
+        ).take(10)
+        top10
+    }
+    val top10RDD = top10ListRDD.flatMap(cate =>
+      cate
+    )
+    val rdd = top10RDD.map(top =>
+      Array(top.taskId, top.category_id, top.sessionId, top.clickCount)
+    ).collect()
+
+      JdbcUtil.executeBatchUpdate("insert into sessiontop10bycid values(?,?,?,?) ",rdd)
+
 
   }
 

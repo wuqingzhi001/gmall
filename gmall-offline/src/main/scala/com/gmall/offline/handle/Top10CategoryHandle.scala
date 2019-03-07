@@ -65,8 +65,8 @@ object Top10CategoryHandle {
     val array = cateTop10List.map(cate =>
       Array(cate.taskId, cate.category_id, cate.click_count, cate.order_count, cate.pay_count)
     )
-    JdbcUtil.executeBatchUpdate("insert into category_top10 values(?,?,?,?,?)", array)
-    catecountList
+    //JdbcUtil.executeBatchUpdate("insert into category_top10 values(?,?,?,?,?)", array)
+    cateTop10List
   }
 
 }
