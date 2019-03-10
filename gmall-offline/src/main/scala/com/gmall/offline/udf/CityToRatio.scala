@@ -9,6 +9,7 @@ import org.apache.spark.sql.types._
 import scala.collection.immutable.HashMap
 import scala.collection.mutable
 
+
 /**
   * @aythor HeartisTiger
   *         2019-03-07 20:16
@@ -36,7 +37,7 @@ class CityToRatio extends UserDefinedAggregateFunction{
   //更新，每到一条数据做一次更新
   override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
 
-    val citycount = buffer.getAs[HashMap[String,Long]](0)
+    val citycount = buffer.getAs[Map[String,Long]](0)
     val totalcount = buffer.getAs[Long](1)
     val cityname = input.getString(0)
     buffer(0) = citycount +(cityname->(citycount.getOrElse(cityname,0L)+1L))
@@ -45,10 +46,10 @@ class CityToRatio extends UserDefinedAggregateFunction{
 
   //合并 每个分区处理完成 汇总到driver时进行合并
   override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
-    val map1 = buffer1.getAs[HashMap[String,Long]](0)
-    val map2 = buffer2.getAs[HashMap[String,Long]](0)
+    val map1 = buffer1.getAs[Map[String,Long]](0)
+    val map2 = buffer2.getAs[Map[String,Long]](0)
     val count1 = buffer1.getAs[Long](1)
-    val count2 = buffer1.getAs[Long](1)
+    val count2 = buffer2.getAs[Long](1)
   buffer1(0) =   map1.foldLeft(map2){
       case (map2,(cityname,count))=>
           map2 + (cityname->(map2.getOrElse(cityname,0L)+count))
@@ -58,23 +59,32 @@ class CityToRatio extends UserDefinedAggregateFunction{
   }
 
   //把存储中的数据展示出来
-  override def evaluate(buffer: Row): Any = {
-    val map = buffer.getAs[HashMap[String,Long]](0)
+  override def evaluate(buffer: Row): String = {
+    val map = buffer.getAs[Map[String,Long]](0)
     val count = buffer.getLong(1)
-    val ratioMap1 = new mutable.HashMap[String,Double]
+
+    val ratioMap1 = new HashMap[String,Double]
     val list = map.map {
       case (cityname, count1) =>
-        var raito = new DecimalFormat("#.00").format(cityname -> count1 * 1.0 / count).toDouble
+        var raito = count1*1.0/count
         CityRatioInfo(cityname, raito)
     }.toList
 
-    list.sortWith((x,y)=>
-      if(x.ratio>y.ratio){
+    val top2City = list.sortWith((x, y) =>
+      if (x.ratio > y.ratio) {
         true
-      }else {
+      } else {
         false
       }
     ).take(2)
+
+    var num = 1.0
+    for(ratio<-top2City){
+      num -= ratio.ratio
+    }
+    top2City(0).cityname+" "+(top2City(0).ratio*100.0).formatted("%.2f")+"%,"+top2City(1).cityname+"" +
+      " "+(top2City(1).ratio*100).formatted("%.2f")+",其他 "+(num*100.0).formatted("%.2f")
+
 
 
 
