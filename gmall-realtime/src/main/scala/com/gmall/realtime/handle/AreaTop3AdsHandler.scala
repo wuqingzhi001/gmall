@@ -1,7 +1,12 @@
 package com.gmall.realtime.handle
 
-import com.alibaba.fastjson.JSON
+import java.util
+
+import com.gmall.common.utils.RedisUtil
 import org.apache.spark.streaming.dstream.DStream
+import org.json4s.native.JsonMethods
+import org.json4s.JsonDSL._
+
 
 /**
   * @aythor HeartisTiger
@@ -20,11 +25,21 @@ object AreaTop3AdsHandler {
     }.groupByKey()
     val adsTop3List = areaAdsCount.map { case (key, adscountItr) =>
       val list = adscountItr.toList.sortWith(_._2 > _._2).take(3)
-
-      val map = list.toMap
-      (key,JSON.toJSONString(map))
+      val jsonstring = JsonMethods.compact(JsonMethods.render(list))
+      (key,jsonstring)
     }
-    adsTop3List.foreachRDD(rdd=>rdd.foreach(println))
+    //(2019-03-11:华北,List((1,390), (6,388), (5,385)))
+    adsTop3List.foreachRDD(rdd=>
+
+      rdd.foreachPartition(rddItr=> {
+        val jedis = RedisUtil.getJedisClient
+        rddItr.foreach{case (datearea,json)=>
+          jedis.hset("top3_ads_per_day:"+datearea.split(":")(0),datearea.split(":")(1),json)
+        }
+        jedis.close()
+      }
+      )
+    )
 
 
 
