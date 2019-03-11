@@ -12,6 +12,7 @@
         <module>gmall-common</module>
         <module>gmall-mock</module>
         <module>gmall-offline</module>
+        <module>gmall-realtime</module>
     </modules>
 
 
